@@ -63,11 +63,17 @@ where the hierarchy is given via bullets and the results folder has all of the m
 If you have any issues, feel free to create an issue in this github repo or email the authors. 
 
 # 3D iGibson Environments, 4D Manipulator and Neural Heuristics Experiments
-In this section, we show how to reproduce results of the Heuristics.
+In this section, we show how to reproduce results of the Heuristics. These experiments need at least 16 GB of GPU to test . 
 We provide pre-trained models and the datasets used. We briefly describe on how the datasets were generated for each experiment.
+Prepare the conda environment using the environment.yaml file and activate it
+```
+conda env create -f environment.yml -n pno
+conda activate pno
+```
+
 
 ### 3D iGibson Experiments
-We used the environments introduced in the Interactive Gibson Benchmark (iGibson 0.5) [Xia et al., 2020](https://arxiv.org/abs/1910.14442), which provides a suite of photorealistic, interactive, and cluttered 3D scenes for benchmarking navigation tasks. Binary occupancy maps were generated using the open-source voxelization tools available in the GitHub repository [Voxelizer and SDF](https://github.com/rFalque/voxelization_and_sdf). The Signed Distance Function was generated using [Scipy.ndimage](https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.distance_transform_edt.html) package. FMM was used to generate the value functions. [Pykonal](https://malcolmw.github.io/pykonal-docs/) was used specifically for this expertiment.
+We used the environments introduced in the Interactive Gibson Benchmark (iGibson 0.5) [Xia et al., 2020](https://arxiv.org/abs/1910.14442), which provides a suite of photorealistic, interactive, and cluttered 3D scenes for benchmarking navigation tasks. Binary occupancy maps were generated using the open-source voxelization tools available in the GitHub repository [Voxelizer and SDF](https://github.com/rFalque/voxelization_and_sdf). The Signed Distance Function was generated using [Scipy.ndimage](https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.distance_transform_edt.html) package. FMM was used to generate the value functions. [Pykonal](https://malcolmw.github.io/pykonal-docs/) was used specifically for this experiment.
 
 The dataset and the model used in the experiments in the paper are provided in the link below. 
 
