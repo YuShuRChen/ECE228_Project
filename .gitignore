@@ -5,3 +5,5 @@
 # Ignore all Python bytecode caches
 **/__pycache__/
 *.py[cod]
+
+.idea
