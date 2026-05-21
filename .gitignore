@@ -1,7 +1,7 @@
 # Ignoring specific folders
 **/dataset/
 examples/results/
-examples/
+examples/**.pdf
 
 
 # Ignore all Python bytecode caches
