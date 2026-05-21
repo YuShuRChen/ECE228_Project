@@ -1,4 +1,5 @@
 # Ignoring specific folders
+**/models/
 **/dataset/
 
 
