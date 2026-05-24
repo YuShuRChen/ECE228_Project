@@ -3,15 +3,16 @@ import numpy as np
 
 
 class Environment2D(EnvironmentABC):
-    __U = np.array([[-1, -1, -1, 0, 0, 1, 1, 1], [-1, 0, 1, -1, 1, -1, 0, 1]])
-    __iU = np.array([0, 1, 2, 3, 4, 5, 6, 7])
-    __cU = np.array([np.sqrt(2), 1, np.sqrt(2), 1, 1, np.sqrt(2), 1, np.sqrt(2)])
+    __U = np.array([[-1, -1, -1, 0, 0, 1, 1, 1], [-1, 0, 1, -1, 1, -1, 0, 1]]) # action space for 8 direction movements
+    __iU = np.array([0, 1, 2, 3, 4, 5, 6, 7]) # index for __U
+    __cU = np.array([np.sqrt(2), 1, np.sqrt(2), 1, 1, np.sqrt(2), 1, np.sqrt(2)]) # cost for movements: 1 for straight, sqrt(2) for diagonal
 
-    def __init__(self, goal_coord, cmap, valuefunction=None):
-        self.__goal_coord = goal_coord
-        self.__cmap = cmap
-        self.__cdim = np.array([cmap.shape]).T
-        self.valuefunction = valuefunction
+    def __init__(self, goal_coord, cmap, valuefunction=None, risk_weight=2.0):
+        self.__goal_coord = goal_coord # goal coordinate
+        self.__cmap = cmap # cost map
+        self.__cdim = np.array([cmap.shape]).T # cost map dimensions
+        self.valuefunction = valuefunction # value function (heuristics)
+        self.risk_weight = risk_weight
 
     def isGoal(self, curr):
         return np.array_equal(curr, self.__goal_coord)
@@ -34,7 +35,7 @@ class Environment2D(EnvironmentABC):
         map_values = self.__cmap[succ[0, :], succ[1, :]]
         valid = map_values < 1.0
         succ = succ[:, valid]
-        succ_cost = succ_cost[valid] + map_values[valid]
+        succ_cost = succ_cost[valid] + self.risk_weight * map_values[valid]
         #succ_idx = self.coord_to_idx(succ)
         action_idx = action_idx[valid]
         return succ, succ_cost, action_idx
