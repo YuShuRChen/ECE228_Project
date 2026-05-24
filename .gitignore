@@ -1,7 +1,7 @@
 # Ignoring specific folders
 **/models/
 **/dataset/
-
+examples/results/
 
 # Ignore all Python bytecode caches
 **/__pycache__/

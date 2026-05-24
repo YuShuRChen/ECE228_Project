@@ -1,5 +1,0 @@
-ModelParameters: 265585
-BestL2TrainingError: 0.09947130680084229
-BestL2TestingError: 0.12764381647109985
-BestEpoch: 499
-TotalTrainingTime: 156.33238368799357
