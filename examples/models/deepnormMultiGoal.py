@@ -15,7 +15,7 @@ from metrics.deepnorm import MaxReLUPairwiseActivation
 from metrics.deepnorm import ConcaveActivation
 
 class DEEPNORM2dMultiGoal(nn.Module):
-    def __init__(self, nlayers, modes1, modes2, width):
+    def __init__(self, nlayers, modes1, modes2, width, in_channels=1):
         super(DEEPNORM2dMultiGoal, self).__init__()
 
         """
@@ -39,6 +39,9 @@ class DEEPNORM2dMultiGoal(nn.Module):
 
         self.fc0 = nn.Linear(self.inp_size, self.width)
 
+        # add: project any channel number into width
+        self.chi_proj = nn.Conv2d(in_channels, self.width, kernel_size=1)
+
         for i in range(self.nlayers):
             self.add_module('conv%d' % i, SpectralConv2d(self.width, self.width, self.modes1, self.modes2))
             self.add_module('w%d' % i, nn.Conv2d(self.width, self.width, 1))
@@ -52,7 +55,8 @@ class DEEPNORM2dMultiGoal(nn.Module):
         grid = self.get_grid(batchsize, size_x, size_y, chi.device)
 
         chi = chi.permute(0, 3, 1, 2)
-        chi = chi.expand(batchsize, self.width, size_x, size_y)
+        #chi = chi.expand(batchsize, self.width, size_x, size_y)
+        chi = self.chi_proj(chi)
         x = grid
 
         # Lifting layer:
