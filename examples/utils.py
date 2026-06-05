@@ -6,7 +6,7 @@ from scipy.ndimage import distance_transform_edt
 from matplotlib.colors import LinearSegmentedColormap
 
 # Add heuristics dir to path for A*
-heuristics_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../2D_Neural_Heuristics"))
+heuristics_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../src"))
 if heuristics_dir not in sys.path:
     sys.path.append(heuristics_dir)
 
