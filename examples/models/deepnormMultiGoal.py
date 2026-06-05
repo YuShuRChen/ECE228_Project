@@ -7,12 +7,14 @@ from timeit import default_timer
 # Use current relative directory
 import os
 import sys
+
 dirname = os.path.dirname(__file__)
 sys.path.insert(1, dirname)
 from spectralLayer import SpectralConv2d
 from metrics.deepnorm import DeepNormMetric
 from metrics.deepnorm import MaxReLUPairwiseActivation
 from metrics.deepnorm import ConcaveActivation
+
 
 class DEEPNORM2dMultiGoal(nn.Module):
     def __init__(self, nlayers, modes1, modes2, width, in_channels=1):
@@ -46,7 +48,8 @@ class DEEPNORM2dMultiGoal(nn.Module):
             self.add_module('conv%d' % i, SpectralConv2d(self.width, self.width, self.modes1, self.modes2))
             self.add_module('w%d' % i, nn.Conv2d(self.width, self.width, 1))
 
-        self.fc1 =  DeepNormMetric(self.width, (128, 128), concave_activation_size=20, activation=lambda: MaxReLUPairwiseActivation(128), symmetric=True)
+        self.fc1 = DeepNormMetric(self.width, (128, 128), concave_activation_size=20,
+                                  activation=lambda: MaxReLUPairwiseActivation(128), symmetric=True)
 
     def forward(self, chi, goal):
         batchsize = chi.shape[0]
@@ -55,7 +58,7 @@ class DEEPNORM2dMultiGoal(nn.Module):
         grid = self.get_grid(batchsize, size_x, size_y, chi.device)
 
         chi = chi.permute(0, 3, 1, 2)
-        #chi = chi.expand(batchsize, self.width, size_x, size_y)
+        # chi = chi.expand(batchsize, self.width, size_x, size_y)
         chi = self.chi_proj(chi)
         x = grid
 
@@ -73,18 +76,19 @@ class DEEPNORM2dMultiGoal(nn.Module):
 
         x = x.permute(0, 2, 3, 1)
         g = x.clone()
-    
+
         # find better way to do this
         goal_y_indices = goal[:, 1]
         goal_x_indices = goal[:, 0]
-        g = x[torch.arange(batchsize), goal_y_indices, goal_x_indices, :].unsqueeze(1).repeat(1, size_x, 1).unsqueeze(1).repeat(1, size_x, 1, 1)
-        
+        g = x[torch.arange(batchsize), goal_y_indices, goal_x_indices, :].unsqueeze(1).repeat(1, size_x, 1).unsqueeze(
+            1).repeat(1, size_x, 1, 1)
+
         feature1 = g
         feature2 = x
-        reshapedfeature1 = feature1.reshape(-1,self.width)
-        reshapedfeature2 = feature2.reshape(-1,self.width)
-        output = self.fc1(reshapedfeature1,reshapedfeature2)
-        reshapedoutput = output.reshape(batchsize,size_x,size_y,1)
+        reshapedfeature1 = feature1.reshape(-1, self.width)
+        reshapedfeature2 = feature2.reshape(-1, self.width)
+        output = self.fc1(reshapedfeature1, reshapedfeature2)
+        reshapedoutput = output.reshape(batchsize, size_x, size_y, 1)
         return reshapedoutput
 
     def get_grid(self, batchsize, size_x, size_y, device):
