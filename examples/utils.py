@@ -23,7 +23,7 @@ def smooth_chi(mask, dist, smooth_coef=5.0):
     return torch.mul(torch.tanh(dist * smooth_coef), (mask - 0.5)) + 0.5
 
 
-def load_alex_model(device, model_dir="examples/models/"):
+def load_new_model(device, model_dir="examples/models/"):
     # Source of truth: dynamic_planning_with_moving_obstacles.ipynb
     # Logic: modelPNO from results/alexm/best_model.pt
     if not os.path.exists(model_dir):

@@ -78,7 +78,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
 
 # Load Models
-modelSDF, modelPNO = load_alex_model(device)
+modelSDF, modelPNO = load_new_model(device)
 
 # Pre-compute CHI (Smoothed SDF) and mask tensor
 mask_tensor = torch.tensor(binary_map, dtype=torch.float).reshape(1, H, W, 1).to(device)
