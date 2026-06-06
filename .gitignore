@@ -29,7 +29,7 @@ env/
 **/models/
 **/dataset/
 examples/results/
-examples/demonstration_plots/
+examples/data/
 
 # macOS
 .DS_Store

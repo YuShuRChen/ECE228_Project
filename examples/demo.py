@@ -9,7 +9,7 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 from utils import *
 
 # Output directory for images and animations
-OUTPUT_DIR = "data"
+OUTPUT_DIR = "demonstration_plots"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 risk_cmap = get_risk_colormap()
@@ -39,10 +39,26 @@ SIGMA_STATIC = 1.0
 static_risk = np.exp(-(static_dist ** 2) / (2 * SIGMA_STATIC ** 2))
 static_risk = (static_risk - static_risk.min()) / (static_risk.max() - static_risk.min() + 1e-8)
 
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+titles = ["Binary Map", "Distance Field (SDF)", "Static Risk"]
+maps = [binary_map, static_dist, static_risk]
+cmaps = ["gray", "viridis", risk_cmap]
+
+for ax, m, title, cmap in zip(axes, maps, titles, cmaps):
+    im = ax.imshow(m, origin='lower', cmap=cmap)
+    ax.set_title(title)
+    ax.axis('off')
+    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+plt.tight_layout()
+plt.savefig(os.path.join(OUTPUT_DIR, "01_static_map_analysis.png"), bbox_inches='tight')
+print("Static map analysis plot saved.")
+plt.close()
+
 # --- 2. Settings & Initializations ---
-PERC_OPEN_CELLS = 0.02
+PERC_OPEN_CELLS = 0.05
 TOTAL_STEPS = 50
-SIGMA_DYNAMIC = 1.0
+SIGMA_DYNAMIC = 1.5
 ALPHA_DYNAMIC = 0.3
 DYNAMIC_SPEED = 1.0
 
@@ -73,6 +89,56 @@ obs_indices = random_open_cells[1:]
 obs_positions = [open_cells[idx].astype(float) for idx in obs_indices]
 obs_velocities = [DIRECTIONS[np.random.choice(len(DIRECTIONS))] for _ in range(NUM_OBSTACLES)]
 
+initial_risk = compute_total_risk(obs_positions, obs_velocities, static_risk, H, W, sigma_dyn=SIGMA_DYNAMIC,
+                                  alpha_dyn=ALPHA_DYNAMIC)
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+titles = ["Binary Map with Obstacles", "Risk Map with Obstacles"]
+maps = [binary_map, initial_risk]
+cmaps = ["gray", risk_cmap]
+
+for ax, m, title, cmap in zip(axes, maps, titles, cmaps):
+    ax.imshow(m, origin='lower', cmap=cmap)
+    ax.plot(np.array(obs_positions)[:, 1], np.array(obs_positions)[:, 0], 'ko', label='Obstacles')
+    ax.set_title(title)
+    ax.legend()
+    ax.axis('off')
+
+plt.tight_layout()
+plt.savefig(os.path.join(OUTPUT_DIR, "02_initial_obstacle_placement.png"), bbox_inches='tight')
+print("Initial obstacle placement plot saved.")
+plt.close()
+
+# --- 3. Run Risk Simulation & Animation ---
+sim_data = run_risk_simulation(obs_positions, obs_velocities, static_risk, binary_map, H, W,
+                               TOTAL_STEPS, SIGMA_DYNAMIC, ALPHA_DYNAMIC)
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+ax1.imshow(binary_map, origin='lower', cmap='gray')
+obs_dots_binary, = ax1.plot([], [], 'ko', markersize=8)
+ax1.set_title("Binary Environment")
+ax1.axis('off')
+
+im_risk = ax2.imshow(sim_data['risk'][0], origin='lower', cmap=risk_cmap, vmin=0, vmax=1.0)
+obs_dots_risk, = ax2.plot([], [], 'ko', markersize=8, markeredgecolor='black')
+ax2.set_title("Dynamic Continuous Risk")
+ax2.axis('off')
+
+artists = {
+    'im_risk': im_risk,
+    'obs_dots_bin': obs_dots_binary,
+    'obs_dots_risk': obs_dots_risk
+}
+
+update_fn = partial(animation_step, data_dict=sim_data, artists=artists)
+
+ani = FuncAnimation(fig, update_fn, frames=TOTAL_STEPS, interval=100, blit=False)
+gif_path = os.path.join(OUTPUT_DIR, "03_risk_simulation.gif")
+print(f"Saving risk animation to {gif_path}...")
+ani.save(gif_path, writer=PillowWriter(fps=7))
+plt.close()
+print("Risk simulation complete.")
+
 # --- 4. Global PNO Setup ---
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
@@ -98,15 +164,34 @@ global_path, _ = plan_path_astar(agent_pos_init, goal_data, static_risk, cost_ma
 if len(global_path) == 0:
     print("Warning: No global static path found! The goal may be unreachable.")
 
+# 3. Visualization
+plt.figure(figsize=(12, 5))
+
+maps = [binary_map, static_risk]
+cmaps = ["gray", risk_cmap]
+titles = ["Path Planning in Static Binary Map", "Path Planning in Static Risk Map"]
+
+for i in range(2):
+    plt.subplot(1, 2, i + 1)
+    plt.imshow(maps[i], cmap=cmaps[i], origin='lower')
+    if len(global_path) > 0:
+        plt.plot(global_path[:, 1], global_path[:, 0], 'b-', linewidth=2, label='A* Path')
+    plt.plot(agent_pos_init[1], agent_pos_init[0], 'bs', markersize=6, label='Start')
+    plt.plot(goal_data[1], goal_data[0], 'b*', markersize=10, label='Goal')
+    plt.title(titles[i])
+    plt.legend()
+    plt.axis('off')
+
+plt.tight_layout()
+plt.savefig(os.path.join(OUTPUT_DIR, "04_static_path_planning.png"), bbox_inches='tight')
+plt.close()
+print("Static planning plot saved.")
+
 # --- 6. Dynamic Planning Simulation ---
 plan_data = run_planning_simulation(obs_positions, obs_velocities, agent_pos_init, goal_data,
                                     modelPNO, chi_tensor, mask_tensor, device,
                                     static_risk, binary_map, H, W,
                                     SIGMA_DYNAMIC, ALPHA_DYNAMIC, global_path=global_path)
-
-# Save Evaluation Metrics
-output_dir = os.path.join(OUTPUT_DIR, str(MAP_SIZE), f"{METHOD}_{MODEL}")
-save_metrics(plan_data['metrics'], output_dir, f"{MAP_IDX}.json")
 
 # Animation Setup
 fig_dyn, (ax_bin, ax_risk) = plt.subplots(1, 2, figsize=(14, 6))
@@ -140,7 +225,7 @@ artists_dyn = {
 update_dyn_fn = partial(animation_step, data_dict=plan_data, artists=artists_dyn)
 
 ani_dyn = FuncAnimation(fig_dyn, update_dyn_fn, frames=len(plan_data['risk']), interval=150, blit=False)
-gif_path = os.path.join(output_dir, f"{MAP_IDX}.gif")
+gif_path = os.path.join(OUTPUT_DIR, "05_dynamic_planning.gif")
 print(f"Saving planning animation to {gif_path}...")
 ani_dyn.save(gif_path, writer=PillowWriter(fps=7))
 plt.close()
