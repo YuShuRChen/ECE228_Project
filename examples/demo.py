@@ -56,9 +56,9 @@ print("Static map analysis plot saved.")
 plt.close()
 
 # --- 2. Settings & Initializations ---
-PERC_OPEN_CELLS = 0.05
+PERC_OPEN_CELLS = 0.02
 TOTAL_STEPS = 50
-SIGMA_DYNAMIC = 1.5
+SIGMA_DYNAMIC = 1.0
 ALPHA_DYNAMIC = 0.3
 DYNAMIC_SPEED = 1.0
 
