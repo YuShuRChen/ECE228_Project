@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import os
 import sys
+import json
 from scipy.ndimage import distance_transform_edt
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -21,6 +22,42 @@ def get_risk_colormap():
 
 def smooth_chi(mask, dist, smooth_coef=5.0):
     return torch.mul(torch.tanh(dist * smooth_coef), (mask - 0.5)) + 0.5
+
+
+def check_collision(agent_pos, obs_positions, binary_map):
+    """
+    Checks for collisions.
+    Static: 0 in binary_map represents an obstacle.
+    Dynamic: Moving obstacles are checked at the agent's 4 neighbors (H/V).
+    """
+    r, c = int(round(agent_pos[0])), int(round(agent_pos[1]))
+    H, W = binary_map.shape
+    
+    # Convert dynamic obstacle positions to grid coordinates
+    obs_grid = set([(int(round(o[0])), int(round(o[1]))) for o in obs_positions])
+    
+    # Check current and 4 neighbors (up, down, left, right)
+    for dr, dc in [(0, 0), (0, 1), (0, -1), (1, 0), (-1, 0)]:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < H and 0 <= nc < W:
+            # Check static map (0=obstacle)
+            if binary_map[nr, nc] == 0:
+                return True
+            # Check dynamic obstacles
+            if (nr, nc) in obs_grid:
+                return True
+    return False
+
+
+def save_metrics(metrics, output_dir, filename):
+    """
+    Saves the metrics dictionary to a JSON file.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    path = f"{output_dir}/{filename}"
+    with open(path, 'w') as f:
+        json.dump(metrics, f, indent=4)
+    print(f"Metrics saved to {path}")
 
 
 def load_new_model(device, model_dir="examples/models/"):
@@ -145,16 +182,42 @@ def run_planning_simulation(obs_pos_init, obs_vel_init, agent_pos_init, goal_dat
     obs_pos = [p.copy() for p in obs_pos_init]; obs_vel = [v.copy() for v in obs_vel_init]
     agent_pos = agent_pos_init.copy(); goal_coord = torch.tensor([goal_data], dtype=torch.int).to(device)
     risk_frames, obs_frames, agent_frames, path_frames = [], [], [], []
+    
+    # Metric initialization
+    total_nodes_expanded = 0
+    cumulative_risk = 0.0
+    collision_count = 0
+    
     max_steps = 500
     while not np.array_equal(agent_pos, goal_data) and len(agent_frames) < max_steps:
         risk = compute_total_risk(obs_pos, obs_vel, static_risk, H, W, sigma_dyn, alpha_dyn)
         risk_frames.append(risk.copy()); obs_frames.append(np.array(obs_pos).copy())
+        
         cost_map = run_pno_inference(modelPNO, risk, chi_tensor, goal_coord, mask_tensor, device)
-        path, _ = plan_path_astar(agent_pos, goal_data, risk, cost_map)
+        path, expands = plan_path_astar(agent_pos, goal_data, risk, cost_map)
+        
         path_frames.append(path.copy())
         if len(path) > 1: agent_pos = path[1]
+        
+        # Accumulate metrics after moving
+        total_nodes_expanded += expands
+        cumulative_risk += risk[int(agent_pos[0]), int(agent_pos[1])]
+        if check_collision(agent_pos, obs_pos, binary_map):
+            collision_count += 1
+            
         agent_frames.append(agent_pos.copy()); step_obstacles(obs_pos, obs_vel, binary_map, H, W)
-    return {'risk': risk_frames, 'obs': obs_frames, 'agent': agent_frames, 'path': path_frames, 'global_path': global_path}
+        
+    metrics = {
+        'path_length': len(agent_frames),
+        'total_nodes_expanded': total_nodes_expanded,
+        'cumulative_risk': float(cumulative_risk),
+        'mean_risk_per_step': float(cumulative_risk / max(1, len(agent_frames))),
+        'hard_collisions': collision_count,
+        'success': np.array_equal(agent_pos, goal_data)
+    }
+    
+    return {'risk': risk_frames, 'obs': obs_frames, 'agent': agent_frames, 'path': path_frames, 
+            'global_path': global_path, 'metrics': metrics}
 
 
 def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, goal_data,
@@ -165,6 +228,12 @@ def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, go
     agent_pos = agent_pos_init.copy()
     window_center = agent_pos.copy() # Stable center
     risk_frames, obs_frames, agent_frames, path_frames = [], [], [], []
+    
+    # Metric initialization
+    total_nodes_expanded = 0
+    cumulative_risk = 0.0
+    collision_count = 0
+    
     max_steps = 500; base_window_size = 20
 
     while not np.array_equal(agent_pos, goal_data) and len(agent_frames) < max_steps:
@@ -217,7 +286,7 @@ def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, go
                                              size=(r_max-r_min, c_max-c_min), mode='bilinear').squeeze().cpu().numpy()
 
         agent_local_pos = np.array([agent_pos[0] - r_min, agent_pos[1] - c_min])
-        path_local, _ = plan_path_astar(agent_local_pos.astype(int), local_goal.astype(int), local_risk, cost_to_go_local)
+        path_local, expands = plan_path_astar(agent_local_pos.astype(int), local_goal.astype(int), local_risk, cost_to_go_local)
         
         if len(path_local) > 0:
             path_global = path_local + np.array([r_min, c_min])
@@ -225,8 +294,26 @@ def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, go
             if len(path_local) > 1: agent_pos = path_global[1]
         else:
             path_frames.append(np.array([]))
+            
+        # Accumulate metrics after moving
+        total_nodes_expanded += expands
+        cumulative_risk += risk_global[int(agent_pos[0]), int(agent_pos[1])]
+        if check_collision(agent_pos, obs_pos, binary_map):
+            collision_count += 1
+            
         agent_frames.append(agent_pos.copy()); step_obstacles(obs_pos, obs_vel, binary_map, H, W)
-    return {'risk': risk_frames, 'obs': obs_frames, 'agent': agent_frames, 'path': path_frames, 'global_path': global_path}
+        
+    metrics = {
+        'path_length': len(agent_frames),
+        'total_nodes_expanded': total_nodes_expanded,
+        'cumulative_risk': float(cumulative_risk),
+        'mean_risk_per_step': float(cumulative_risk / max(1, len(agent_frames))),
+        'hard_collisions': collision_count,
+        'success': np.array_equal(agent_pos, goal_data)
+    }
+        
+    return {'risk': risk_frames, 'obs': obs_frames, 'agent': agent_frames, 'path': path_frames, 
+            'global_path': global_path, 'metrics': metrics}
 
 
 def animation_step(frame, data_dict, artists):

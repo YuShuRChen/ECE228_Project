@@ -9,12 +9,13 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 from utils import *
 
 # Output directory for images and animations
-OUTPUT_DIR = "demonstration_plots"
+OUTPUT_DIR = "data"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 risk_cmap = get_risk_colormap()
 
 METHOD = "sliding_window"
+MODEL = "new"
 
 # --- 1. Load Map & Weights ---
 MAP_SIZE = 64
@@ -40,7 +41,7 @@ static_risk = np.exp(-(static_dist ** 2) / (2 * SIGMA_STATIC ** 2))
 static_risk = (static_risk - static_risk.min()) / (static_risk.max() - static_risk.min() + 1e-8)
 
 # --- 2. Initialize Scenario ---
-PERC_OPEN_CELLS = 0.05
+PERC_OPEN_CELLS = 0.02
 SIGMA_DYNAMIC = 1.0
 ALPHA_DYNAMIC = 1.0
 DYNAMIC_SPEED = 1.0
@@ -93,13 +94,19 @@ goal_coord_static = torch.tensor(np.array([goal_data]), dtype=torch.int).to(devi
 cost_map_static = run_pno_inference(modelPNO, static_risk, chi_tensor, goal_coord_static, mask_tensor, device)
 global_path, _ = plan_path_astar(agent_pos_init, goal_data, static_risk, cost_map_static, risk_weight=10.0)
 
+if len(global_path) == 0:
+    print("Warning: No global static path found! The goal may be unreachable.")
+
 # --- 4. Run Advanced Dynamic Window Simulation ---
 print("Running Dynamic Window Simulation (Path-Guided)...")
 plan_data = run_dynamic_window_simulation(obs_positions, obs_velocities, agent_pos_init, goal_data,
                                           modelPNO, chi_tensor, mask_tensor, device,
                                           static_risk, binary_map, H, W,
-                                          SIGMA_DYNAMIC, ALPHA_DYNAMIC,
-                                          global_path=global_path)
+                                          SIGMA_DYNAMIC, ALPHA_DYNAMIC, global_path=global_path)
+
+# Save Evaluation Metrics
+output_dir = os.path.join(OUTPUT_DIR, str(MAP_SIZE), f"{METHOD}_{MODEL}")
+save_metrics(plan_data['metrics'], output_dir, f"{MAP_IDX}.json")
 
 # --- 5. Animation ---
 fig, (ax_bin, ax_risk) = plt.subplots(1, 2, figsize=(14, 6))
@@ -107,7 +114,7 @@ fig, (ax_bin, ax_risk) = plt.subplots(1, 2, figsize=(14, 6))
 # Binary Plot - Matching demo.py last plot style (BLUE)
 ax_bin.imshow(binary_map, origin='lower', cmap='gray')
 gp_line_bin, = ax_bin.plot([], [], 'b--', alpha=0.5, label='Global Plan')
-obs_dots_bin, = ax_bin.plot([], [], 'bo', markersize=6)
+obs_dots_bin, = ax_bin.plot([], [], 'ko', markersize=6)
 agent_dot_bin, = ax_bin.plot([], [], 'bs', markersize=6)
 ax_bin.plot(goal_data[1], goal_data[0], 'b*', markersize=10)
 ax_bin.set_title("Binary Environment")
@@ -116,7 +123,7 @@ ax_bin.axis('off')
 # Risk Plot - Matching demo.py last plot style (BLUE)
 im_risk_dyn = ax_risk.imshow(plan_data['risk'][0], origin='lower', cmap=risk_cmap, vmin=0, vmax=1.0)
 path_line, = ax_risk.plot([], [], 'b-', linewidth=2)
-obs_dots_risk, = ax_risk.plot([], [], 'bo', markersize=6)
+obs_dots_risk, = ax_risk.plot([], [], 'ko', markersize=6)
 agent_dot_risk, = ax_risk.plot([], [], 'bs', markersize=6)
 ax_risk.plot(goal_data[1], goal_data[0], 'b*', markersize=10)
 ax_risk.set_title("Dynamic Neural Planning")
@@ -135,7 +142,7 @@ artists = {
 update_fn = partial(animation_step, data_dict=plan_data, artists=artists)
 
 ani = FuncAnimation(fig, update_fn, frames=len(plan_data['risk']), interval=100, blit=False)
-gif_path = os.path.join(OUTPUT_DIR, f"{MAP_SIZE}/{MAP_IDX}/{METHOD}/dynamic_planning.gif")
+gif_path = os.path.join(output_dir, f"{MAP_IDX}.gif")
 print(f"Saving advanced planning animation to {gif_path}...")
 ani.save(gif_path, writer=PillowWriter(fps=10))
 plt.close()
