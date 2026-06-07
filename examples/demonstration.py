@@ -23,7 +23,6 @@ def run_demo(
         seed=0,
         output_dir="data"
 ):
-    # Apply Seed
     np.random.seed(seed)
 
     # Output Setup
@@ -45,12 +44,10 @@ def run_demo(
     H, W = binary_map.shape
     print(f"Map size: {H}x{W}, Method: {method}, Model: {model}")
 
-    # Precompute Static Risk
     static_risk = np.exp(-(static_dist ** 2) / (2 * sigma_static ** 2))
     static_risk = (static_risk - static_risk.min()) / (static_risk.max() - static_risk.min() + 1e-8)
 
     # --- 2. Initialize Scenario ---
-    # Obstacle movement directions
     DIRECTIONS = np.array([
         [0, dynamic_speed], [dynamic_speed, 0], [0, -dynamic_speed], [-dynamic_speed, 0],
         [dynamic_speed, dynamic_speed], [dynamic_speed, -dynamic_speed],
@@ -61,14 +58,22 @@ def run_demo(
     num_obstacles = math.floor(num_open_cells * perc_obs)
     print(f"{num_open_cells} open cells, {num_obstacles} obstacles")
 
-    # Spawn points
-    random_open_cells = np.random.choice(len(open_cells), num_obstacles + 1, replace=False)
-    agent_pos_init = open_cells[random_open_cells[0]]
+    start_positions = np.load(os.path.join(data_dir, "start_positions.npy"))
+    agent_pos_init = start_positions[map_idx]
 
     goal_maps = np.load(os.path.join(data_dir, "goal.npy"))
     goal_data = goal_maps[map_idx][::-1]
 
-    obs_indices = random_open_cells[1:]
+    start_cell = tuple(agent_pos_init.astype(int))
+    goal_cell = tuple(goal_data.astype(int))
+
+    candidate_indices = []
+    for i, cell in enumerate(open_cells):
+        c_tuple = tuple(cell)
+        if c_tuple != start_cell and c_tuple != goal_cell:
+            candidate_indices.append(i)
+
+    obs_indices = np.random.choice(candidate_indices, num_obstacles, replace=False)
     obs_positions = [open_cells[idx].astype(float) for idx in obs_indices]
     obs_velocities = [DIRECTIONS[np.random.choice(len(DIRECTIONS))] for _ in range(num_obstacles)]
 
@@ -76,13 +81,11 @@ def run_demo(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # Load Models based on MODEL argument
     if model == "new":
         modelSDF, modelPNO = load_new_model(device)
     else:
         modelSDF, modelPNO = load_pno_models(device)
 
-    # Pre-compute SDF and mask tensor
     mask_tensor = torch.tensor(binary_map, dtype=torch.float).reshape(1, H, W, 1).to(device)
     with torch.no_grad():
         sdf_pred = modelSDF(mask_tensor)
@@ -149,7 +152,6 @@ def run_demo(
 
     update_fn = partial(animation_step, data_dict=plan_data, artists=artists)
 
-    # Standardized animation settings
     interval, fps = 100, 10
 
     ani = FuncAnimation(fig, update_fn, frames=len(plan_data['risk']), interval=interval, blit=False)

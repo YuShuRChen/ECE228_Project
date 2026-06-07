@@ -78,14 +78,24 @@ print(num_open_cells, "open cells")
 NUM_OBSTACLES = math.floor(num_open_cells * PERC_OPEN_CELLS)
 print(NUM_OBSTACLES, "obstacles")
 
-# Spawn points
-random_open_cells = np.random.choice(len(open_cells), NUM_OBSTACLES+1, replace=False)
+# Load Start and Goal positions
+start_positions = np.load(os.path.join(data_dir, "start_positions.npy"))
+agent_pos_init = start_positions[MAP_IDX]
 
-agent_pos_init = open_cells[random_open_cells[0]]
 goal_maps = np.load(os.path.join(data_dir, "goal.npy"))
 goal_data = goal_maps[MAP_IDX][::-1]
 
-obs_indices = random_open_cells[1:]
+# Spawn obstacles: Filter out start and goal from candidates
+start_cell = tuple(agent_pos_init.astype(int))
+goal_cell = tuple(goal_data.astype(int))
+
+candidate_indices = []
+for i, cell in enumerate(open_cells):
+    c_tuple = tuple(cell)
+    if c_tuple != start_cell and c_tuple != goal_cell:
+        candidate_indices.append(i)
+
+obs_indices = np.random.choice(candidate_indices, NUM_OBSTACLES, replace=False)
 obs_positions = [open_cells[idx].astype(float) for idx in obs_indices]
 obs_velocities = [DIRECTIONS[np.random.choice(len(DIRECTIONS))] for _ in range(NUM_OBSTACLES)]
 
