@@ -181,12 +181,13 @@ def run_planning_simulation(obs_pos_init, obs_vel_init, agent_pos_init, goal_dat
                             static_risk, binary_map, H, W, sigma_dyn, alpha_dyn, global_path=None):
     obs_pos = [p.copy() for p in obs_pos_init]; obs_vel = [v.copy() for v in obs_vel_init]
     agent_pos = agent_pos_init.copy(); goal_coord = torch.tensor([goal_data], dtype=torch.int).to(device)
-    risk_frames, obs_frames, agent_frames, path_frames = [], [], [], []
+    risk_frames, obs_frames, agent_frames, path_frames, collision_frames = [], [], [], [], []
     
     # Metric initialization
     total_nodes_expanded = 0
     cumulative_risk = 0.0
     collision_count = 0
+    collision_points = []
     
     max_steps = 500
     while not np.array_equal(agent_pos, goal_data) and len(agent_frames) < max_steps:
@@ -204,7 +205,9 @@ def run_planning_simulation(obs_pos_init, obs_vel_init, agent_pos_init, goal_dat
         cumulative_risk += risk[int(agent_pos[0]), int(agent_pos[1])]
         if check_collision(agent_pos, obs_pos, binary_map):
             collision_count += 1
+            collision_points.append(agent_pos.copy())
             
+        collision_frames.append(np.array(collision_points).copy())
         agent_frames.append(agent_pos.copy()); step_obstacles(obs_pos, obs_vel, binary_map, H, W)
         
     metrics = {
@@ -217,7 +220,7 @@ def run_planning_simulation(obs_pos_init, obs_vel_init, agent_pos_init, goal_dat
     }
     
     return {'risk': risk_frames, 'obs': obs_frames, 'agent': agent_frames, 'path': path_frames, 
-            'global_path': global_path, 'metrics': metrics}
+            'collisions': collision_frames, 'global_path': global_path, 'metrics': metrics}
 
 
 def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, goal_data,
@@ -227,12 +230,13 @@ def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, go
     obs_pos = [p.copy() for p in obs_pos_init]; obs_vel = [v.copy() for v in obs_vel_init]
     agent_pos = agent_pos_init.copy()
     window_center = agent_pos.copy() # Stable center
-    risk_frames, obs_frames, agent_frames, path_frames = [], [], [], []
+    risk_frames, obs_frames, agent_frames, path_frames, collision_frames = [], [], [], [], []
     
     # Metric initialization
     total_nodes_expanded = 0
     cumulative_risk = 0.0
     collision_count = 0
+    collision_points = []
     
     max_steps = 500; base_window_size = 20
 
@@ -300,7 +304,9 @@ def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, go
         cumulative_risk += risk_global[int(agent_pos[0]), int(agent_pos[1])]
         if check_collision(agent_pos, obs_pos, binary_map):
             collision_count += 1
+            collision_points.append(agent_pos.copy())
             
+        collision_frames.append(np.array(collision_points).copy())
         agent_frames.append(agent_pos.copy()); step_obstacles(obs_pos, obs_vel, binary_map, H, W)
         
     metrics = {
@@ -313,7 +319,7 @@ def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, go
     }
         
     return {'risk': risk_frames, 'obs': obs_frames, 'agent': agent_frames, 'path': path_frames, 
-            'global_path': global_path, 'metrics': metrics}
+            'collisions': collision_frames, 'global_path': global_path, 'metrics': metrics}
 
 
 def animation_step(frame, data_dict, artists):
@@ -331,13 +337,21 @@ def animation_step(frame, data_dict, artists):
             artists['global_path_bin'].set_data(gp[:, 1], gp[:, 0]); updated.append(artists['global_path_bin'])
         if 'global_path_risk' in artists:
             artists['global_path_risk'].set_data(gp[:, 1], gp[:, 0]); updated.append(artists['global_path_risk'])
-
     if 'agent' in data_dict:
         if 'agent_dot_bin' in artists:
             artists['agent_dot_bin'].set_data([data_dict['agent'][frame][1]], [data_dict['agent'][frame][0]]); updated.append(artists['agent_dot_bin'])
         if 'agent_dot_risk' in artists:
             artists['agent_dot_risk'].set_data([data_dict['agent'][frame][1]], [data_dict['agent'][frame][0]]); updated.append(artists['agent_dot_risk'])
-        if 'path_line' in artists:
+
+    if 'collisions' in data_dict:
+        c_points = data_dict['collisions'][frame]
+        if len(c_points) > 0:
+            if 'collision_dots_bin' in artists:
+                artists['collision_dots_bin'].set_data(c_points[:, 1], c_points[:, 0]); updated.append(artists['collision_dots_bin'])
+            if 'collision_dots_risk' in artists:
+                artists['collision_dots_risk'].set_data(c_points[:, 1], c_points[:, 0]); updated.append(artists['collision_dots_risk'])
+
+    if 'path' in data_dict:
             p = data_dict['path'][frame]
             if len(p) > 0: artists['path_line'].set_data(p[:, 1], p[:, 0])
             else: artists['path_line'].set_data([], [])
