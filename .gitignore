@@ -26,10 +26,14 @@ env/
 .ipynb_checkpoints/
 
 # Project Data & Artifacts
-**/models/
+#**/models/
 **/dataset/
 examples/results/
 examples/data/
+examples/models/**/*.pt
+examples/models/**/*.txt
+examples/models/.gitattributes
+examples/models/README.md
 
 # macOS
 .DS_Store

@@ -23,10 +23,12 @@ def main():
     parser.add_argument("--sigma_dynamic", type=float, default=1.0, help="Risk sigma for dynamic obstacles.")
     parser.add_argument("--alpha_dynamic", type=float, default=0.3, help="Alpha parameter for dynamic risk.")
     parser.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility.")
-    parser.add_argument("--use_risk_as_chi", action="store_true", help="Replace binary map with risk map when forming chi.")
+    parser.add_argument("--use_risk_as_chi", action="store_true",
+                        help="Replace binary map with risk map when forming chi.")
+    parser.add_argument("--use_binary_cost", action="store_true",
+                        help="A* only sees binary occupancy, not smooth risk.")
 
     # Output Settings
-
     parser.add_argument("--output_dir", type=str, default="data", help="Root directory for output data.")
 
     args = parser.parse_args()
