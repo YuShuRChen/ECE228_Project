@@ -10,7 +10,7 @@ def main():
     # Core Experiment Settings
     parser.add_argument("--map_size", type=int, default=64, help="Map size (64 or 256).")
     parser.add_argument("--start_idx", type=int, default=0, help="Starting map index.")
-    parser.add_argument("--end_idx", type=int, default=10, help="Ending map index (exclusive).")
+    parser.add_argument("--end_idx", type=int, default=100, help="Ending map index (exclusive).")
     parser.add_argument("--method", type=str, default="whole_map", choices=["whole_map", "sliding_window"],
                         help="Planning method to use.")
     parser.add_argument("--model", type=str, default="original", choices=["original", "new"],
