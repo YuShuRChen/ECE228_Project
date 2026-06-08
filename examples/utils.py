@@ -302,10 +302,11 @@ def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, go
         if np.linalg.norm(agent_pos - window_center) > (half_w // 2):
             window_center = agent_pos.copy()
 
-        r_min = int(np.clip(window_center[0] - half_w, 0, H - 2))
-        r_max = int(np.clip(window_center[0] + half_w, r_min + 2, H))
-        c_min = int(np.clip(window_center[1] - half_w, 0, W - 2))
-        c_max = int(np.clip(window_center[1] + half_w, c_min + 2, W))
+        desired_w = 2 * half_w
+        r_min = int(np.clip(window_center[0] - half_w, 0, max(0, H - desired_w)))
+        r_max = int(min(r_min + desired_w, H))
+        c_min = int(np.clip(window_center[1] - half_w, 0, max(0, W - desired_w)))
+        c_max = int(min(c_min + desired_w, W))
 
         local_risk = risk_global[r_min:r_max, c_min:c_max]
         local_risk_t = torch.tensor(local_risk, dtype=torch.float).reshape(1, 1, r_max - r_min, c_max - c_min).to(
@@ -331,9 +332,9 @@ def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, go
                 norm = max(abs(dr), abs(dc), 1e-6)
                 local_goal = np.array([(agent_pos[0] - r_min) + (dr / norm) * (half_w - 2),
                                        (agent_pos[1] - c_min) + (dc / norm) * (half_w - 2)])
-                local_goal[0], local_goal[1] = np.clip(local_goal[0], 0, (r_max - r_min) - 1), np.clip(local_goal[1], 0,
-                                                                                                       (
-                                                                                                                   c_max - c_min) - 1)
+
+        local_goal[0] = np.clip(local_goal[0], 0, (r_max - r_min) - 1)
+        local_goal[1] = np.clip(local_goal[1], 0, (c_max - c_min) - 1)
 
         model_goal = torch.tensor(np.array([[local_goal[0] * (256.0 / (r_max - r_min)),
                                              local_goal[1] * (256.0 / (c_max - c_min))]]), dtype=torch.int).to(device)
