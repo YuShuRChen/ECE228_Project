@@ -54,36 +54,35 @@ def save_metrics(metrics, output_dir, filename):
     Saves the metrics dictionary to a JSON file.
     """
     os.makedirs(output_dir, exist_ok=True)
-    path = f"{output_dir}/{filename}"
+    path = os.path.join(output_dir, filename)
     with open(path, 'w') as f:
         json.dump(metrics, f, indent=4)
     print(f"Metrics saved to {path}")
 
 
 def load_new_model(device, model_dir="examples/models/"):
-    # Source of truth: dynamic_planning_with_moving_obstacles.ipynb
-    # Logic: modelPNO from results/alexm/best_model.pt
     if not os.path.exists(model_dir):
         model_dir = "./models/"
         
     from models.fno import FNO2d
-    from models.deepnormMultiGoal import DEEPNORM2dMultiGoal
+    # Importing the teammate's edited version for the new model
+    from models.newdeepnormMultiGoal import DEEPNORM2dMultiGoal as NewDeepNorm
 
     modelSDF = FNO2d(4, 1, 8, 8, 16).to(device)
-    modelPNO = DEEPNORM2dMultiGoal(4, 8, 8, 16, in_channels=2).to(device)
+    # The new model architecture uses chi_proj and supports in_channels=2
+    modelPNO = NewDeepNorm(4, 8, 8, 16, in_channels=2).to(device)
 
     try:
         sdf_path = os.path.join(model_dir, "FNOSDF/best_model.pt")
-        # Alex's model path as per notebook
-        alex_path = os.path.join(os.path.dirname(model_dir), "results/alexm/best_model.pt")
+        alex_path = os.path.join(os.path.dirname(model_dir), "models/alexm/best_model.pt")
         if not os.path.exists(alex_path):
-            alex_path = "./results/alexm/best_model.pt"
+            alex_path = "./models/alexm/best_model.pt"
         
         modelSDF.load_state_dict(torch.load(sdf_path, map_location=device, weights_only=True))
         modelPNO.load_state_dict(torch.load(alex_path, map_location=device, weights_only=True))
-        print(f"Alex's models loaded successfully from {alex_path}.")
+        print(f"New risk-aware model loaded from {alex_path}.")
     except Exception as e:
-        print(f"Warning: Alex's model loading failed ({e}). Using random weights.")
+        print(f"Warning: New model loading failed ({e}). Using random weights.")
 
     modelSDF.eval()
     modelPNO.eval()
@@ -93,20 +92,63 @@ def load_new_model(device, model_dir="examples/models/"):
 def load_pno_models(device, model_dir="examples/models/"):
     if not os.path.exists(model_dir):
         model_dir = "./models/"
+    
     from models.fno import FNO2d
-    from models.deepnormMultiGoal import DEEPNORM2dMultiGoal
+    # Importing the original paper version for the baseline
+    from models.deepnormMultiGoal import DEEPNORM2dMultiGoal as OriginalDeepNorm
+
     modelSDF = FNO2d(4, 1, 8, 8, 16).to(device)
-    modelPNO = DEEPNORM2dMultiGoal(4, 8, 8, 16, in_channels=2).to(device)
+    # Original model uses the .expand() logic (no in_channels argument)
+    modelPNO = OriginalDeepNorm(4, 8, 8, 16).to(device)
+
     try:
         sdf_path = os.path.join(model_dir, "FNOSDF/best_model.pt")
         pno_path = os.path.join(model_dir, "PNOwPINN/best_model.pt")
         modelSDF.load_state_dict(torch.load(sdf_path, map_location=device, weights_only=True))
+        # Note: Original weights might have slightly different layer names, 
+        # so we load with strict=False to be safe.
         modelPNO.load_state_dict(torch.load(pno_path, map_location=device, weights_only=True), strict=False)
-        print(f"Pre-trained models loaded from {model_dir} (partial match).")
+        print(f"Original risk-blind model loaded from {pno_path}.")
     except Exception as e:
-        print(f"Warning: Pre-trained weights loading failed ({e}). Using random weights.")
+        print(f"Warning: Original model loading failed ({e}). Using random weights.")
+    
     modelSDF.eval(); modelPNO.eval()
     return modelSDF, modelPNO
+
+
+def run_pno_inference(modelPNO, risk_map, chi_tensor, goal_coord, mask_tensor, device, 
+                      use_risk_as_chi=False, static_sdf_t=None):
+    """
+    Runs inference, automatically detecting if model expects 1 or 2 channels.
+    """
+    # Safety Check: Original model uses .expand(), New model uses .chi_proj()
+    is_new_arch = hasattr(modelPNO, 'chi_proj')
+
+    # Calculate Chi to use for this step
+    if use_risk_as_chi and static_sdf_t is not None:
+        # Form Chi using Risk instead of Binary Mask
+        risk_t_for_chi = torch.tensor(risk_map, dtype=torch.float).reshape(1, risk_map.shape[0], risk_map.shape[1], 1).to(device)
+        current_chi = smooth_chi(risk_t_for_chi, static_sdf_t, 5.0)
+    else:
+        current_chi = chi_tensor.to(device)
+
+    if is_new_arch:
+        # New Model: Expects [Chi, Risk]
+        risk_t = torch.tensor(risk_map, dtype=torch.float).reshape(1, risk_map.shape[0], risk_map.shape[1], 1).to(device)
+        input_tensor = torch.cat([current_chi, risk_t], dim=-1)
+    else:
+        # Original Model: Expects [Chi] only
+        input_tensor = current_chi
+        
+    with torch.no_grad():
+        cost_to_go = modelPNO(input_tensor, goal_coord)
+    return (cost_to_go * mask_tensor).squeeze().cpu().numpy()
+
+
+def plan_path_astar(start_node, goal_node, cost_map, value_function, risk_weight=10.0):
+    env = Environment2D(goal_node, cost_map, valuefunction=value_function, risk_weight=risk_weight)
+    path_cost, path, actions, expands, _ = AStar.plan(start_node, env)
+    return np.asarray(path), expands
 
 
 def compute_total_risk(obs_positions, obs_velocities, static_risk, H, W, sigma_dyn=1.0, alpha_dyn=0.6):
@@ -117,13 +159,12 @@ def compute_total_risk(obs_positions, obs_velocities, static_risk, H, W, sigma_d
         d_sq = dx ** 2 + dy ** 2
         d_norm = np.sqrt(d_sq) + 1e-6
         speed = np.linalg.norm(vel)
-        cos_theta = (dx * vel[1] + dy * vel[0]) / (speed * d_norm + 1e-6)
-        local_sigma = sigma_dyn * (speed + 1.0)
-        w = 1 + alpha_dyn * cos_theta
-        denom = 2 * (local_sigma * w) ** 2 + 1e-6
-        risk = np.exp(-(d_sq) / denom)
-        total_risk = np.maximum(total_risk, risk)
-    return np.clip(total_risk, 0, 1)
+        if speed > 1e-4:
+            cos_theta = (dx * vel[1] + dy * vel[0]) / (d_norm * speed)
+            decay = np.exp(-d_sq / (2 * sigma_dyn ** 2))
+            directional_bias = 1 + alpha_dyn * cos_theta
+            total_risk += decay * directional_bias
+    return np.clip(total_risk, 0, 1.0)
 
 
 def step_obstacles(obs_positions, obs_velocities, binary_map, H, W):
@@ -150,22 +191,6 @@ def step_obstacles(obs_positions, obs_velocities, binary_map, H, W):
         obs_positions[i], obs_velocities[i] = pos, vel
 
 
-def run_pno_inference(modelPNO, risk_map, chi_tensor, goal_coord, mask_tensor, device):
-    # Order for Alex's model (from notebook): [Chi, Risk]
-    risk_t = torch.tensor(risk_map, dtype=torch.float).reshape(1, risk_map.shape[0], risk_map.shape[1], 1).to(device)
-    chi_t = chi_tensor.to(device)
-    with torch.no_grad():
-        input_tensor = torch.cat([chi_t, risk_t], dim=-1)
-        cost_to_go = modelPNO(input_tensor, goal_coord)
-    return (cost_to_go * mask_tensor).squeeze().cpu().numpy()
-
-
-def plan_path_astar(start_node, goal_node, cost_map, value_function, risk_weight=10.0):
-    env = Environment2D(goal_node, cost_map, valuefunction=value_function, risk_weight=risk_weight)
-    path_cost, path, actions, expands, _ = AStar.plan(start_node, env)
-    return np.asarray(path), expands
-
-
 def run_risk_simulation(obs_pos_init, obs_vel_init, static_risk, binary_map, H, W, steps, sigma_dyn, alpha_dyn):
     obs_pos = [p.copy() for p in obs_pos_init]; obs_vel = [v.copy() for v in obs_vel_init]
     risk_frames, obs_frames = [], []
@@ -178,7 +203,8 @@ def run_risk_simulation(obs_pos_init, obs_vel_init, static_risk, binary_map, H, 
 
 def run_planning_simulation(obs_pos_init, obs_vel_init, agent_pos_init, goal_data,
                             modelPNO, chi_tensor, mask_tensor, device,
-                            static_risk, binary_map, H, W, sigma_dyn, alpha_dyn, global_path=None):
+                            static_risk, binary_map, H, W, sigma_dyn, alpha_dyn, 
+                            global_path=None, use_risk_as_chi=False, static_sdf_t=None):
     obs_pos = [p.copy() for p in obs_pos_init]; obs_vel = [v.copy() for v in obs_vel_init]
     agent_pos = agent_pos_init.copy(); goal_coord = torch.tensor([goal_data], dtype=torch.int).to(device)
     risk_frames, obs_frames, agent_frames, path_frames, collision_frames = [], [], [], [], []
@@ -194,7 +220,8 @@ def run_planning_simulation(obs_pos_init, obs_vel_init, agent_pos_init, goal_dat
         risk = compute_total_risk(obs_pos, obs_vel, static_risk, H, W, sigma_dyn, alpha_dyn)
         risk_frames.append(risk.copy()); obs_frames.append(np.array(obs_pos).copy())
         
-        cost_map = run_pno_inference(modelPNO, risk, chi_tensor, goal_coord, mask_tensor, device)
+        cost_map = run_pno_inference(modelPNO, risk, chi_tensor, goal_coord, mask_tensor, device, 
+                                     use_risk_as_chi=use_risk_as_chi, static_sdf_t=static_sdf_t)
         path, expands = plan_path_astar(agent_pos, goal_data, risk, cost_map)
         
         path_frames.append(path.copy())
@@ -225,7 +252,8 @@ def run_planning_simulation(obs_pos_init, obs_vel_init, agent_pos_init, goal_dat
 
 def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, goal_data,
                                  modelPNO, chi_tensor, mask_tensor, device,
-                                 static_risk, binary_map, H, W, sigma_dyn, alpha_dyn, global_path=None):
+                                 static_risk, binary_map, H, W, sigma_dyn, alpha_dyn, 
+                                 global_path=None, use_risk_as_chi=False, static_sdf_t=None):
     import torch.nn.functional as F
     obs_pos = [p.copy() for p in obs_pos_init]; obs_vel = [v.copy() for v in obs_vel_init]
     agent_pos = agent_pos_init.copy()
@@ -283,7 +311,22 @@ def run_dynamic_window_simulation(obs_pos_init, obs_vel_init, agent_pos_init, go
         model_goal = torch.tensor(np.array([[local_goal[0] * (256.0/(r_max-r_min)), 
                                              local_goal[1] * (256.0/(c_max-c_min))]]), dtype=torch.int).to(device)
         
-        input_tensor = torch.cat([input_chi, input_risk], dim=1).permute(0, 2, 3, 1) # [1, 256, 256, 2]
+        # Safety Check: Original model uses .expand(), New model uses .chi_proj()
+        is_new_arch = hasattr(modelPNO, 'chi_proj')
+        
+        if use_risk_as_chi and static_sdf_t is not None:
+            # Local Risk-as-Chi logic
+            local_sdf = static_sdf_t[:, r_min:r_max, c_min:c_max, :]
+            local_sdf_up = F.interpolate(local_sdf.permute(0, 3, 1, 2), size=(256, 256), mode='bilinear')
+            input_chi = smooth_chi(input_risk, local_sdf_up, 5.0)
+
+        if is_new_arch:
+            # New Model expects [Chi, Risk]
+            input_tensor = torch.cat([input_chi, input_risk], dim=1).permute(0, 2, 3, 1) # [1, 256, 256, 2]
+        else:
+            # Original Model expects [Chi]
+            input_tensor = input_chi.permute(0, 2, 3, 1) # [1, 256, 256, 1]
+
         with torch.no_grad():
             cost_to_go_upscaled = modelPNO(input_tensor, model_goal)
             cost_to_go_local = F.interpolate(cost_to_go_upscaled.permute(0, 3, 1, 2), 
@@ -337,6 +380,7 @@ def animation_step(frame, data_dict, artists):
             artists['global_path_bin'].set_data(gp[:, 1], gp[:, 0]); updated.append(artists['global_path_bin'])
         if 'global_path_risk' in artists:
             artists['global_path_risk'].set_data(gp[:, 1], gp[:, 0]); updated.append(artists['global_path_risk'])
+
     if 'agent' in data_dict:
         if 'agent_dot_bin' in artists:
             artists['agent_dot_bin'].set_data([data_dict['agent'][frame][1]], [data_dict['agent'][frame][0]]); updated.append(artists['agent_dot_bin'])
@@ -352,6 +396,7 @@ def animation_step(frame, data_dict, artists):
                 artists['collision_dots_risk'].set_data(c_points[:, 1], c_points[:, 0]); updated.append(artists['collision_dots_risk'])
 
     if 'path' in data_dict:
+        if 'path_line' in artists:
             p = data_dict['path'][frame]
             if len(p) > 0: artists['path_line'].set_data(p[:, 1], p[:, 0])
             else: artists['path_line'].set_data([], [])

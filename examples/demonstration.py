@@ -21,7 +21,8 @@ def run_demo(
         sigma_dynamic=1.0,
         alpha_dynamic=0.3,
         seed=0,
-        output_dir="data"
+        output_dir="data",
+        use_risk_as_chi=False
 ):
     np.random.seed(seed)
 
@@ -90,6 +91,9 @@ def run_demo(
     with torch.no_grad():
         sdf_pred = modelSDF(mask_tensor)
         chi_tensor = smooth_chi(mask_tensor, sdf_pred, 5.0)
+    
+    # Store static SDF for potential risk-as-chi use
+    static_sdf_t = sdf_pred.clone()
     print("Model setup complete.")
 
     # --- 4. Static Path Planning (Global Guide) ---
@@ -108,17 +112,22 @@ def run_demo(
                                                   modelPNO, chi_tensor, mask_tensor, device,
                                                   static_risk, binary_map, H, W,
                                                   sigma_dynamic, alpha_dynamic,
-                                                  global_path=global_path)
+                                                  global_path=global_path,
+                                                  use_risk_as_chi=use_risk_as_chi,
+                                                  static_sdf_t=static_sdf_t)
     else:
         print("Running Whole Map Simulation...")
         plan_data = run_planning_simulation(obs_positions, obs_velocities, agent_pos_init, goal_data,
                                             modelPNO, chi_tensor, mask_tensor, device,
                                             static_risk, binary_map, H, W,
                                             sigma_dynamic, alpha_dynamic,
-                                            global_path=global_path)
+                                            global_path=global_path,
+                                            use_risk_as_chi=use_risk_as_chi,
+                                            static_sdf_t=static_sdf_t)
 
     # --- 6. Save Results ---
-    final_output_dir = os.path.join(output_dir, str(map_size), f"{method}_{model}")
+    suffix = "_risk" if use_risk_as_chi else "_binary"
+    final_output_dir = os.path.join(output_dir, str(map_size), f"{method}_{model}{suffix}")
     save_metrics(plan_data['metrics'], final_output_dir, f"{map_idx}.json")
 
     # Animation Setup
@@ -184,6 +193,7 @@ if __name__ == "__main__":
     parser.add_argument("--sigma_dynamic", type=float, default=1.0, help="Risk sigma for dynamic obstacles.")
     parser.add_argument("--alpha_dynamic", type=float, default=0.3, help="Alpha parameter for dynamic risk.")
     parser.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility.")
+    parser.add_argument("--use_risk_as_chi", action="store_true", help="Replace binary map with risk map when forming chi.")
 
     # Output Settings
     parser.add_argument("--output_dir", type=str, default="data", help="Root directory for output data.")
