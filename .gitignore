@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environment
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Data (too large for git)
+2D/dataset/
+3D/dataset/
+4D/dataset/
+
+# Trained model weights (too large for git)
+2D/results/
+3D/results/
+4D/results/
+
+# Temporary / debug files
+2D/training_results
+2D/test.ipynb
+2D/pinnGradOUTDIST2.pdf
+2D/pinnOUTDIST2.pdf
+2D/superResExampleNYC.pdf
+2410.17547v3.pdf
+find_orig.py
+parse_nb.py
+test_goal.py
