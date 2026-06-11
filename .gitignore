@@ -28,6 +28,7 @@ env/
 # Project Data & Artifacts
 #**/models/
 **/dataset/
+data
 examples/results/
 examples/data/
 examples/models/**/*.pt
