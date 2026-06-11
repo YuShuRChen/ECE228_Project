@@ -17,15 +17,24 @@ def run_demo(
         model="original",
         perc_obs=0.02,
         dynamic_speed=1.0,
-        sigma_static=1.0,
-        sigma_dynamic=1.0,
-        alpha_dynamic=0.3,
+        sigma_static=None,
+        sigma_dynamic=None,
+        alpha_dynamic=None,
         seed=0,
         output_dir="data",
         use_risk_as_chi=False,
         use_binary_cost=False
 ):
     np.random.seed(seed)
+
+    # --- 0. Handle Defaults ---
+    risk_defaults = {
+        64: {'sigma_static': 1.0, 'sigma_dynamic': 1.0, 'alpha_dynamic': 0.3},
+        256: {'sigma_static': 4.0, 'sigma_dynamic': 4.0, 'alpha_dynamic': 0.3}
+    }
+    if sigma_static is None: sigma_static = risk_defaults.get(map_size, risk_defaults[64])['sigma_static']
+    if sigma_dynamic is None: sigma_dynamic = risk_defaults.get(map_size, risk_defaults[64])['sigma_dynamic']
+    if alpha_dynamic is None: alpha_dynamic = risk_defaults.get(map_size, risk_defaults[64])['alpha_dynamic']
 
     # Output Setup
     os.makedirs(output_dir, exist_ok=True)
@@ -193,9 +202,9 @@ if __name__ == "__main__":
     # Scenario Parameters
     parser.add_argument("--perc_obs", type=float, default=0.02, help="Percentage of open cells occupied by obstacles.")
     parser.add_argument("--dynamic_speed", type=float, default=1.0, help="Movement speed of obstacles.")
-    parser.add_argument("--sigma_static", type=float, default=1.0, help="Risk sigma for static obstacles.")
-    parser.add_argument("--sigma_dynamic", type=float, default=1.0, help="Risk sigma for dynamic obstacles.")
-    parser.add_argument("--alpha_dynamic", type=float, default=0.3, help="Alpha parameter for dynamic risk.")
+    parser.add_argument("--sigma_static", type=float, default=None, help="Risk sigma for static obstacles.")
+    parser.add_argument("--sigma_dynamic", type=float, default=None, help="Risk sigma for dynamic obstacles.")
+    parser.add_argument("--alpha_dynamic", type=float, default=None, help="Alpha parameter for dynamic risk.")
     parser.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility.")
     parser.add_argument("--use_risk_as_chi", action="store_true",
                         help="Replace binary map with risk map when forming chi.")

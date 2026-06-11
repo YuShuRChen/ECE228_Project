@@ -19,9 +19,9 @@ def main():
     # Scenario Parameters (Passed to demo.run_demo)
     parser.add_argument("--perc_obs", type=float, default=0.02, help="Percentage of open cells occupied by obstacles.")
     parser.add_argument("--dynamic_speed", type=float, default=1.0, help="Movement speed of obstacles.")
-    parser.add_argument("--sigma_static", type=float, default=1.0, help="Risk sigma for static obstacles.")
-    parser.add_argument("--sigma_dynamic", type=float, default=1.0, help="Risk sigma for dynamic obstacles.")
-    parser.add_argument("--alpha_dynamic", type=float, default=0.3, help="Alpha parameter for dynamic risk.")
+    parser.add_argument("--sigma_static", type=float, default=None, help="Risk sigma for static obstacles.")
+    parser.add_argument("--sigma_dynamic", type=float, default=None, help="Risk sigma for dynamic obstacles.")
+    parser.add_argument("--alpha_dynamic", type=float, default=None, help="Alpha parameter for dynamic risk.")
     parser.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility.")
     parser.add_argument("--use_risk_as_chi", action="store_true",
                         help="Replace binary map with risk map when forming chi.")
@@ -32,6 +32,15 @@ def main():
     parser.add_argument("--output_dir", type=str, default="data", help="Root directory for output data.")
 
     args = parser.parse_args()
+
+    # --- Handle Defaults ---
+    risk_defaults = {
+        64: {'sigma_static': 1.0, 'sigma_dynamic': 1.0, 'alpha_dynamic': 0.3},
+        256: {'sigma_static': 4.0, 'sigma_dynamic': 4.0, 'alpha_dynamic': 0.3}
+    }
+    if args.sigma_static is None: args.sigma_static = risk_defaults.get(args.map_size, risk_defaults[64])['sigma_static']
+    if args.sigma_dynamic is None: args.sigma_dynamic = risk_defaults.get(args.map_size, risk_defaults[64])['sigma_dynamic']
+    if args.alpha_dynamic is None: args.alpha_dynamic = risk_defaults.get(args.map_size, risk_defaults[64])['alpha_dynamic']
 
     # Get total number of maps available
     data_dir = f"dataset/synthetic/{args.map_size}x{args.map_size}/"
