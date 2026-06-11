@@ -1,11 +1,39 @@
-# Ignoring specific folders
+# IDEs
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments & Secrets
+.venv/
+venv/
+env/
+.env
+*.key
+
+# Logs & Caches
+*.log
+.cache/
+.ipynb_checkpoints/
+
+# Project Data & Artifacts
+#**/models/
 **/dataset/
 examples/results/
-examples/**.pdf
+examples/data/
+examples/models/**/*.pt
+examples/models/**/*.txt
+examples/models/.gitattributes
+examples/models/README.md
 
-
-# Ignore all Python bytecode caches
-**/__pycache__/
-*.py[cod]
-
-.idea
+# macOS
+.DS_Store
