@@ -1,0 +1,8 @@
+{
+    "path_length": 77,
+    "total_nodes_expanded": 23122,
+    "cumulative_risk": 6.138673192308794,
+    "mean_risk_per_step": 0.07972302847154278,
+    "hard_collisions": 1,
+    "success": true
+}

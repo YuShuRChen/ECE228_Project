@@ -60,7 +60,7 @@ def save_metrics(metrics, output_dir, filename):
     print(f"Metrics saved to {path}")
 
 
-def load_new_model(device, model_dir="examples/models/"):
+def load_new_model(device, model_dir="examples/models"):
     if not os.path.exists(model_dir):
         model_dir = "./models/"
 
@@ -71,7 +71,7 @@ def load_new_model(device, model_dir="examples/models/"):
     modelPNO = NewDeepNorm(4, 8, 8, 16, in_channels=2).to(device)
 
     sdf_path = os.path.join(model_dir, "FNOSDF/best_model.pt")
-    alex_path = os.path.join(os.path.dirname(model_dir), "models/alexm/best_model.pt")
+    alex_path = os.path.join(model_dir, "alexm/best_model.pt")
     if not os.path.exists(alex_path):
         alex_path = "./models/alexm/best_model.pt"
 
