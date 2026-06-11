@@ -1,16 +1,4 @@
-<div align="center">
-  <a href="http://erl.ucsd.edu/">
-    <img align="left" src="docs/static/images/erl.png" width="80" alt="erl">
-  </a>
-  <a href="https://contextualrobotics.ucsd.edu/">
-    <img align="center" src="docs/static/images/cri.png" width="150" alt="cri">
-  </a>
-  <a href="https://ucsd.edu/">
-    <img align="right" src="docs/static/images/ucsd.png" width="260" alt="ucsd">
-  </a>
-</div>
-
-# Risk-Aware Planning Neural Operator (PNO) with Sliding Window Optimization
+# Generalizable Motion Planning in Dynamic Environments via Operator Learning
 
 This repository extends the original **Planning Neural Operator (PNO)** framework to incorporate **dynamic risk awareness** and a **sliding window optimization** for efficient high-resolution path planning.
 
