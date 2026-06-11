@@ -33,15 +33,6 @@ def main():
 
     args = parser.parse_args()
 
-    # --- Handle Defaults ---
-    risk_defaults = {
-        64: {'sigma_static': 1.0, 'sigma_dynamic': 1.0, 'alpha_dynamic': 0.3},
-        256: {'sigma_static': 4.0, 'sigma_dynamic': 4.0, 'alpha_dynamic': 0.3}
-    }
-    if args.sigma_static is None: args.sigma_static = risk_defaults.get(args.map_size, risk_defaults[64])['sigma_static']
-    if args.sigma_dynamic is None: args.sigma_dynamic = risk_defaults.get(args.map_size, risk_defaults[64])['sigma_dynamic']
-    if args.alpha_dynamic is None: args.alpha_dynamic = risk_defaults.get(args.map_size, risk_defaults[64])['alpha_dynamic']
-
     # Get total number of maps available
     data_dir = f"dataset/synthetic/{args.map_size}x{args.map_size}/"
     if not os.path.exists(data_dir):

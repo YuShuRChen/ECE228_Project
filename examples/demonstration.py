@@ -30,7 +30,7 @@ def run_demo(
     # --- 0. Handle Defaults ---
     risk_defaults = {
         64: {'sigma_static': 1.0, 'sigma_dynamic': 1.0, 'alpha_dynamic': 0.3},
-        256: {'sigma_static': 4.0, 'sigma_dynamic': 4.0, 'alpha_dynamic': 0.3}
+        256: {'sigma_static': 2.0, 'sigma_dynamic': 2.0, 'alpha_dynamic': 0.3}
     }
     if sigma_static is None: sigma_static = risk_defaults.get(map_size, risk_defaults[64])['sigma_static']
     if sigma_dynamic is None: sigma_dynamic = risk_defaults.get(map_size, risk_defaults[64])['sigma_dynamic']
